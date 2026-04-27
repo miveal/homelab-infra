@@ -22,7 +22,7 @@ resource "oci_core_instance" "github_runner" {
   }
 
   metadata = {
-    ssh_authorized_keys = file("~/.ssh/id_ed25519.pub")
+    ssh_authorized_keys = var.ssh_public_key
     user_data = base64encode(templatefile("${path.module}/cloud-init-runner.sh.tpl", {
       github_token = var.github_token
       github_repo  = var.github_repo

@@ -31,3 +31,7 @@ variable "bastion_allowed_cidr" {
   description = "CIDR dopuszczony do sesji Bastion (Twoje IP lub 0.0.0.0/0)"
   default     = "0.0.0.0/0"
 }
+
+variable "ssh_public_key" {
+  description = "Publiczny klucz SSH do instancji (zawartość .pub)"
+}
