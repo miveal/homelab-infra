@@ -26,7 +26,7 @@ resource "oci_core_service_gateway" "sgw" {
   display_name   = "homelab-sgw"
 
   services {
-    service_id = data.oci_core_services.all.services[0].id  # "All <region> Services In Oracle Services Network"
+    service_id = data.oci_core_services.all.services[0].id # "All <region> Services In Oracle Services Network"
   }
 }
 
@@ -68,7 +68,7 @@ resource "oci_core_subnet" "private" {
   cidr_block                 = "10.0.1.0/24"
   display_name               = "private-subnet"
   dns_label                  = "private"
-  prohibit_public_ip_on_vnic = true   # <-- wymusza brak public IP
+  prohibit_public_ip_on_vnic = true # <-- wymusza brak public IP
   route_table_id             = oci_core_route_table.private.id
   security_list_ids          = [oci_core_security_list.private.id]
 }
@@ -79,6 +79,6 @@ resource "oci_bastion_bastion" "homelab" {
   bastion_type                 = "STANDARD"
   name                         = "homelab-bastion"
   target_subnet_id             = oci_core_subnet.private.id
-  client_cidr_block_allow_list = [var.bastion_allowed_cidr]  # Twoje IP lub "0.0.0.0/0"
-  max_session_ttl_in_seconds   = 10800  # 3h
+  client_cidr_block_allow_list = [var.bastion_allowed_cidr] # Twoje IP lub "0.0.0.0/0"
+  max_session_ttl_in_seconds   = 10800                      # 3h
 }
