@@ -8,11 +8,6 @@ output "runner_names" {
   value       = oci_core_instance.github_runner[*].display_name
 }
 
-output "bastion_id" {
-  description = "OCID Bastionu do sesji SSH"
-  value       = oci_bastion_bastion.homelab.id
-}
-
 output "tfstate_backend_endpoint" {
   description = "Gotowy endpoint do backend S3 w providers.tf"
   value       = "https://${data.oci_objectstorage_namespace.ns.namespace}.compat.objectstorage.${var.region}.oraclecloud.com"
