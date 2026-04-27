@@ -81,21 +81,24 @@ jobs:
             for (const c of comments.data) {
               if (c.body.includes('<!-- tf-oci-plan -->')) {
                 await github.rest.issues.deleteComment({
-                  owner: context.repo.owner, repo: context.repo.repo,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
                   comment_id: c.id,
                 });
               }
             }
 
+            const body = '<!-- tf-oci-plan -->\n'
+              + '## 🔍 Terraform Plan — OCI\n'
+              + '```hcl\n'
+              + truncated + '\n'
+              + '```';
+
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `<!-- tf-oci-plan -->
-## 🔍 Terraform Plan — OCI
-\`\`\`hcl
-${truncated}
-\`\`\``,
+              body: body,
             });
 
       - name: Terraform Apply
