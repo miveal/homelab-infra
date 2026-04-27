@@ -38,7 +38,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "~1.9"
+          terraform_version: "~1.12"
 
       - name: Write OCI private key
         run: |
@@ -53,10 +53,7 @@ jobs:
         run: terraform fmt -check -recursive
 
       - name: Terraform Init
-        run: |
-          terraform init \
-            -backend-config="access_key=${{ secrets.OCI_BACKEND_ACCESS_KEY }}" \
-            -backend-config="secret_key=${{ secrets.OCI_BACKEND_SECRET_KEY }}"
+        run: terraform init
 
       - name: Terraform Validate
         run: terraform validate
