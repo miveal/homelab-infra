@@ -14,7 +14,7 @@ on:
 
 jobs:
   manage-runners:
-    runs-on: [self-hosted, Linux, X64, heavy]
+    runs-on: ubuntu-latest
     env:
       OCI_CLI_USER:        ${{ secrets.OCI_USER_OCID }}
       OCI_CLI_TENANCY:     ${{ secrets.OCI_TENANCY_OCID }}

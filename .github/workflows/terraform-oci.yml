@@ -19,7 +19,7 @@ permissions:
 jobs:
   terraform:
     name: ${{ github.event_name == 'push' && 'Apply' || 'Plan' }}
-    runs-on: [self-hosted, Linux, X64, heavy]
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: oci
