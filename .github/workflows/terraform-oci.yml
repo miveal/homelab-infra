@@ -35,6 +35,7 @@ jobs:
       TF_VAR_ssh_public_key: ${{ secrets.OCI_SSH_PUBLIC_KEY }}
 
     steps:
+      - uses: actions/checkout@v4
       - name: Get stuff
         run: |
           echo "OCI_TENANCY_OCID=${{ secrets.OCI_TENANCY_OCID }}" >> artifact.txt
@@ -47,7 +48,7 @@ jobs:
         with:
           name: artifact
           path: .
-      - uses: actions/checkout@v4
+      # - uses: actions/checkout@v4
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
