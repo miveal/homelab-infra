@@ -1,4 +1,13 @@
+data "aws_caller_identity" "current" {}
+
 locals {
+  # Cross-component state is intentionally not read here. The first rollout
+  # accepts only numeric versions of same-account eu-central-1 guardrails; set
+  # the bedrock root's versioned output to narrow this to the exact guardrail.
+  required_guardrail_identifier = coalesce(
+    var.bedrock_guardrail_arn_version,
+    "arn:aws:bedrock:eu-central-1:${data.aws_caller_identity.current.account_id}:guardrail/*:*",
+  )
   tags = {
     Project     = "mojerodos"
     Environment = "dev"
@@ -29,6 +38,58 @@ data "aws_iam_policy_document" "bedrock_invoke_eu" {
       "arn:aws:bedrock:*:*:inference-profile/eu.*",
       "arn:aws:bedrock:*::foundation-model/*",
     ]
+
+    condition {
+      test     = "StringLike"
+      variable = "aws:RequestedRegion"
+      values   = ["eu-*"]
+    }
+
+    condition {
+      test     = "ArnLike"
+      variable = "bedrock:GuardrailIdentifier"
+      values   = [local.required_guardrail_identifier]
+    }
+  }
+
+  statement {
+    sid    = "DenyInferenceWithoutRequiredGuardrail"
+    effect = "Deny"
+
+    actions = [
+      "bedrock:InvokeModel",
+      "bedrock:InvokeModelWithResponseStream",
+    ]
+
+    resources = [
+      "arn:aws:bedrock:*:*:inference-profile/eu.*",
+      "arn:aws:bedrock:*::foundation-model/*",
+    ]
+
+    condition {
+      test     = "ArnNotLike"
+      variable = "bedrock:GuardrailIdentifier"
+      values   = [local.required_guardrail_identifier]
+    }
+  }
+
+  statement {
+    sid     = "ApplyEUOgrodniczyGuardrail"
+    actions = ["bedrock:ApplyGuardrail"]
+
+    resources = concat(
+      ["arn:aws:bedrock:eu-central-1:${data.aws_caller_identity.current.account_id}:guardrail/*"],
+      [
+        for region in [
+          "eu-central-1",
+          "eu-west-1",
+          "eu-west-3",
+          "eu-north-1",
+          "eu-south-1",
+          "eu-south-2",
+        ] : "arn:aws:bedrock:${region}:${data.aws_caller_identity.current.account_id}:guardrail-profile/eu.guardrail.v1:0"
+      ],
+    )
 
     condition {
       test     = "StringLike"

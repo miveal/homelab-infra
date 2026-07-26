@@ -1,7 +1,7 @@
 # AWS
 
 **Status:** partial — `bootstrap` APPLIED; `billing` APPLIED (green 2026-07-14); `identity/dev` APPLIED (PR #10 merged `ff8d564`, prod-gated apply green; principal live — SigV4 probes authenticate)
-**Verified as of:** 2026-07-17 on commit `ff8d564` + mantle-access extension on PR branch `feat/aws-identity-dev-mantle-access`
+**Verified as of:** 2026-07-25 on branch `feat/aws-identity-dev-mantle-access`
 **Owner of scope (in repo):** `aws/` (`bootstrap/`, `billing/`, …)
 
 ## What this covers
@@ -34,7 +34,13 @@ shared with [[ci]].
   static-key user `mojerodos-dev-app` (key minted manually — never in TF state; delivered via
   homelab sops Secret). First consumer: Ogrodniczy advisor chat (hub agent#887 Wave B, core
   v1.59.0). Roles Anywhere + Bedrock guardrails/invocation logging deliberately NOT in scope
-  (see Parked). `validate` green; lock committed (linux_amd64 + darwin_arm64).
+  (see Parked). The policy now requires a numeric same-account guardrail version on every
+  model inference and can be narrowed to the exact `bedrock/dev` versioned ARN without
+  reading remote state.
+- **`aws/bedrock/dev/`** — BUILT 2026-07-25, not applied. Service-side Standard-tier
+  detect-mode guardrail using the EU cross-region guardrail profile. Prompt attack,
+  misconduct, and secret-pattern detections run with action `NONE`; no model-invocation
+  logging is enabled. Publishes an immutable version for application/IAM wiring.
 - `.github/workflows/aws.yml` + `_terraform.yml` — changed-leaf matrix, OIDC, prod approval gate.
 - All three roots pass `terraform validate`. Cross-platform `.terraform.lock.hcl` committed
   (linux_amd64 + darwin).
@@ -86,10 +92,9 @@ shared with [[ci]].
   homelab CA) + the `mojerodos-dev-app` *role* that replaces the static-key user. The RA trigger
   ("build when the app starts calling AWS") FIRED 2026-07-17 and is bridged by the static-key
   stopgap; RA itself waits on homelab CA plumbing. No `identity/prod` until a prod app exists.
-- `bedrock/` — **service-side only**: guardrails + model-invocation logging. (The app *grant* is
-  not part of this component — it lives in `identity/`, see Decisions.) MUST use the `eu.`
-  inference profile only (ban `Global`), whitelist models by retention behaviour (Claude Fable 5
-  / GPT-5.x retain ~30d).
+- `bedrock/` — service-side guardrail is now built in `bedrock/dev`; model-invocation
+  logging remains deliberately disabled. The app grant remains in `identity/`. Guardrail
+  evaluation uses `eu.guardrail.v1:0`; model inference remains restricted to `eu.*`.
 - `network/` + `rds/` — VPC only when RDS/compute lands. `eu-central-1-waw-1a` Local Zone stays
   reserved/unused (regional services don't touch it).
 
@@ -107,8 +112,16 @@ shared with [[ci]].
   `mojerodos-infra`). Local `git remote` still points at the old `homelab-infra` SSH URL — needs
   `git remote set-url origin git@github.com:miveal/mojerodos-infra.git` (redirect keeps it working
   meanwhile). Attempted 2026-07-11 but the harness auto-denied the change (user hadn't named it).
+- **Guardrail rollout:** apply `bedrock/dev`, deploy the returned ID/version to the app, then
+  set `TF_VAR_bedrock_guardrail_arn_version` and apply `identity/dev` for exact-version IAM
+  enforcement. Keep detect actions at `NONE` until Polish false-positive review passes.
+  The locked AWS provider 6.56 does not expose topic input/output actions even though the Bedrock API
+  does, so internal/admin/cross-user topic scope stays in the application classifier for now.
 
 ## Recent changes log
+- 2026-07-25: built `aws/bedrock/dev` detect-mode Standard guardrail and immutable version;
+  added Bedrock `bedrock:GuardrailIdentifier` enforcement + cross-region ApplyGuardrail
+  resources to the dev app grant/boundary. No invocation text logging and no DynamoDB cache.
 - 2026-07-17 (PR branch `feat/aws-identity-dev-mantle-access`): **bedrock-mantle access extension.**
   Live probe (SigV4, app creds) against `bedrock-mantle.eu-central-1.api.aws/v1/models` returned a
   clean IAM denial: `bedrock-mantle:ListModels` on `project/default`, blocked BY THE BOUNDARY —
