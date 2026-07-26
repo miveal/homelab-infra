@@ -9,8 +9,9 @@ caller: the Ogrodniczy advisor chat (hub epic agent#887 Wave B, core v1.59.0).
 - `mojerodos-dev-app-boundary` — EU-residency permissions boundary (the hard ceiling for
   every principal in this root; house convention is boundary, not SCP — standalone account,
   no Org).
-- `mojerodos-dev-app-bedrock-invoke` — invocation-only grant: EU inference profiles +
+- `mojerodos-dev-app-bedrock-invoke` — guardrail-required invocation grant: EU inference profiles +
   underlying foundation models, with an `aws:RequestedRegion eu-*` condition.
+  Inference without a numeric same-account Ogrodniczy guardrail version is explicitly denied.
 - `mojerodos-dev-app` — the static-key IAM user the k3s dev app authenticates as, with the
   boundary attached.
 
@@ -25,16 +26,20 @@ Terraform state. The user is retired when the Roles Anywhere role lands here.
 
 ## Deliberately NOT here
 
-- **Bedrock guardrails + model-invocation logging** — those are the `bedrock/` component
-  (still parked, see `docs/agent-notes/aws.md`). This root owns the *principal and its
-  grants*; `bedrock/` will own the *service-side* config. Not needed for first traffic: the
-  app has its own budget freeze at $30/day / $300/month and writes an `ai_audit_log` row per
-  call.
+- **Bedrock guardrail policy** — it is the `bedrock/` component. This root owns the
+  *principal and its grants* and only enforces that inference supplies the selected
+  version. No model-invocation text logging is enabled.
 - **Roles Anywhere** — see above.
 
 ## Apply
 
 Via the normal repo flow: PR → CI `plan` → merge → prod-gated `apply`. No local apply.
+
+Apply `aws/bedrock/dev` first. Then pass its `guardrail_arn_with_version` output as
+`TF_VAR_bedrock_guardrail_arn_version` when planning/applying this root. The variable is
+not a secret. If omitted during the first cross-component rollout, the policy still
+requires a numeric version of a same-account eu-central-1 guardrail, but exact guardrail
+selection is not locked until the output is supplied.
 
 ## Post-apply manual steps (human, has lead time)
 
