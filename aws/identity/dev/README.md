@@ -8,9 +8,13 @@ caller: the Ogrodniczy advisor chat (hub epic agent#887 Wave B, core v1.59.0).
 
 - `mojerodos-dev-app-boundary` — EU-residency permissions boundary (the hard ceiling for
   every principal in this root; house convention is boundary, not SCP — standalone account,
-  no Org).
+  no Org). Now the **union** of the service grants (Bedrock + SES), still `aws:RequestedRegion
+  eu-*` on every statement.
 - `mojerodos-dev-app-bedrock-invoke` — invocation-only grant: EU inference profiles +
   underlying foundation models, with an `aws:RequestedRegion eu-*` condition.
+- `mojerodos-dev-app-ses-send` — EU-only SES send grant: `ses:SendEmail`/`SendRawEmail` from
+  `*@mojerodos.pl` scoped to the shared apex identity + the `mojerodos-dev-ses` config set
+  (service-side config lives in `aws/ses/shared` + `aws/ses/dev`).
 - `mojerodos-dev-app` — the static-key IAM user the k3s dev app authenticates as, with the
   boundary attached.
 

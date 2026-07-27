@@ -17,3 +17,8 @@ output "bedrock_invoke_policy_arn" {
   description = "EU-only Bedrock invocation policy attached to the dev app user."
   value       = aws_iam_policy.bedrock_invoke_eu.arn
 }
+
+output "ses_send_policy_arn" {
+  description = "EU-only SES send policy (from mojerodos.pl via the mojerodos-dev-ses config set) attached to the dev app user."
+  value       = aws_iam_policy.ses_send_eu.arn
+}

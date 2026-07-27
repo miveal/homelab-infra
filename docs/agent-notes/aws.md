@@ -1,15 +1,15 @@
 # AWS
 
-**Status:** partial — `bootstrap` APPLIED; `billing` APPLIED (green 2026-07-14); `identity/dev` APPLIED (PR #10 merged `ff8d564`, prod-gated apply green; principal live — SigV4 probes authenticate)
-**Verified as of:** 2026-07-17 on commit `ff8d564` + mantle-access extension on PR branch `feat/aws-identity-dev-mantle-access`
-**Owner of scope (in repo):** `aws/` (`bootstrap/`, `billing/`, …)
+**Status:** partial — `bootstrap` APPLIED; `billing` APPLIED (green 2026-07-14); `identity/dev` APPLIED (PR #10 merged `ff8d564`, prod-gated apply green; principal live — SigV4 probes authenticate); `ses/shared` + `ses/dev` BUILT 2026-07-24 (not applied)
+**Verified as of:** 2026-07-24 on commit `a1b2716` + SES setup on PR branch `feat/aws-ses-dev`
+**Owner of scope (in repo):** `aws/` (`bootstrap/`, `billing/`, `identity/`, `ses/`, …)
 
 ## What this covers
 All AWS Terraform. AWS is the MojeRODos **serverless foundation + shared services** account:
 central Terraform state (for all providers, OVH included), billing/cost controls, Bedrock
-(planned). Not a compute host yet. Does NOT cover Cloudflare DNS ([[cloudflare]]), the homelab
-app, or **SMS** (moved off AWS → SMSAPI.pl, app-side; see the SMS decision below). CI wiring is
-shared with [[ci]].
+(planned), and native **SES** email sending. Not a compute host yet. Does NOT cover Cloudflare
+DNS ([[cloudflare]]) — SES's DKIM/MAIL-FROM records land there — the homelab app, or **SMS**
+(moved off AWS → SMSAPI.pl, app-side; see the SMS decision below). CI wiring is shared with [[ci]].
 
 ## Current state
 - **`aws/bootstrap/`** — **APPLIED** 2026-07-13 (account `474939505073`, user `miveal`). GitHub
@@ -35,6 +35,20 @@ shared with [[ci]].
   homelab sops Secret). First consumer: Ogrodniczy advisor chat (hub agent#887 Wave B, core
   v1.59.0). Roles Anywhere + Bedrock guardrails/invocation logging deliberately NOT in scope
   (see Parked). `validate` green; lock committed (linux_amd64 + darwin_arm64).
+  **Extended 2026-07-24** (branch `feat/aws-ses-dev`): SES send grant `mojerodos-dev-app-ses-send`
+  (`ses:SendEmail`/`SendRawEmail` from `*@mojerodos.pl`, scoped to the apex identity + the
+  `mojerodos-dev-ses` config set, `eu-*` condition) attached to the app user, and the boundary
+  `mojerodos-dev-app-boundary` WIDENED to the union Bedrock+SES (via `source_policy_documents`,
+  `eu-*` on every statement). Not applied.
+- **`aws/ses/shared/`** (eu-central-1, `Environment=shared`) — BUILT 2026-07-24, not applied.
+  Account-global native-SES foundation: apex `mojerodos.pl` domain identity with Easy DKIM
+  (RSA-2048), custom MAIL FROM `mail.mojerodos.pl`, account+region suppression (bounce+complaint).
+  No default config set on the identity (each env passes its own). Outputs `dkim_tokens` /
+  `mail_from_domain` feed the cloudflare DNS follow-up PR. `validate` green; lock committed.
+- **`aws/ses/dev/`** (eu-central-1) — BUILT 2026-07-24, not applied. Dev config set
+  `mojerodos-dev-ses` (TLS REQUIRE, reputation metrics, sending enabled, bounce+complaint
+  suppression) + a CloudWatch event destination. Independent of `ses/shared` at apply time
+  (a config set doesn't reference the identity in TF). `validate` green; lock committed.
 - `.github/workflows/aws.yml` + `_terraform.yml` — changed-leaf matrix, OIDC, prod approval gate.
 - All three roots pass `terraform validate`. Cross-platform `.terraform.lock.hcl` committed
   (linux_amd64 + darwin).
@@ -71,6 +85,33 @@ shared with [[ci]].
 - **Principal named for what it IS, not what it calls:** `mojerodos-dev-app`, not
   `mojerodos-dev-bedrock` — it survives `identity/` growing non-Bedrock grants. Grants carry the
   service in the detail segment (`mojerodos-dev-app-bedrock-invoke`).
+- **SES: shared apex identity + per-env config sets (2026-07-24).** The app sends native SES from
+  the apex `mojerodos.pl`. An `aws_sesv2_email_identity` is unique per account+region, so dev and
+  a future prod CANNOT each verify their own `mojerodos.pl` identity in eu-central-1. Resolution:
+  verify the domain ONCE in an account-global root (`aws/ses/shared`, `Environment=shared`) and
+  express "dev vs prod" via **configuration set + sandbox/production access + IAM scoping**, not
+  separate identities. This is what lets prod onboard later by adding only `aws/ses/prod` +
+  `aws/identity/prod` — `ses/shared` is untouched. The identity carries NO default config set (a
+  default could point at only one env's set); each principal passes `ConfigurationSetName`
+  explicitly, authorized by its grant.
+- **SES grant + boundary widening live in `identity/dev` (2026-07-24).** Same rule as Bedrock —
+  the grant attaches to `mojerodos-dev-app`, so it belongs with the principal. The boundary is now
+  the UNION of Bedrock+SES (the foretold "widens by service, keeps eu-*"). Scoping the grant's
+  `resources` to `[apex identity, mojerodos-dev-ses]` pins the dev principal to the dev config set,
+  isolating it from a future prod config set on the shared identity.
+- **`aws/ses/shared/` deviates from "account-global = flat root" ON PURPOSE (2026-07-24).** A flat
+  `aws/ses/` would be a path-parent of `aws/ses/dev/`, and CI's changed-leaf matcher (`^aws/<leaf>/`)
+  would then re-select the `ses` leaf on every `ses/dev` edit. Using sibling sub-dirs
+  (`ses/shared`, `ses/dev`) keeps leaf detection clean; `Environment=shared` matches billing's tag.
+- **Migrating off Resend, phased (2026-07-24).** Email currently sends via Resend (relays through
+  SES eu-west-1; DNS on `send.mojerodos.pl` + `resend._domainkey` in [[cloudflare]]). Native SES
+  uses a DISJOINT MAIL FROM (`mail.mojerodos.pl`, `feedback-smtp.eu-central-1`) + its own DKIM
+  selectors, so it coexists during migration, then Resend's records retire in a later cutover.
+  MAIL FROM `behavior_on_mx_failure = USE_DEFAULT_VALUE` is tolerant during rollout — tighten to
+  `REJECT_MESSAGE` post-cutover. Native SES over Resend was the user's explicit direction.
+- **CloudWatch (not SNS) for dev SES events.** No extra topic/subscription/IAM, and the
+  suppression lists already auto-drop bad addresses. Prod upgrades to SNS when a real
+  bounce/complaint consumer exists.
 - **SMS is NOT on AWS.** PL sender IDs are dynamic (non-exclusive) and AWS can't hold Poland's
   statutory sender-ID protection (integrator-bound; AWS isn't a UKE-listed integrator), so AWS
   gives zero brand/anti-phishing protection. There's also no Terraform surface for SMS providers.
@@ -92,10 +133,21 @@ shared with [[ci]].
   / GPT-5.x retain ~30d).
 - `network/` + `rds/` — VPC only when RDS/compute lands. `eu-central-1-waw-1a` Local Zone stays
   reserved/unused (regional services don't touch it).
+- `ses/prod/` + `identity/prod/` — at prod onboarding: copy `ses/dev` with `Environment=prod`,
+  config set `mojerodos-prod-ses`, an **SNS** event destination (feedback loop); mirror the send
+  grant + boundary in `identity/prod` (once a prod principal exists). Shared `ses/shared` is NOT
+  re-touched. Production access (sandbox exit) is the per-region manual step then — see runbook.
 
 ## Manual runbook (non-IaC, has lead time)
 1. Apply `aws/bootstrap` (admin creds). 2. `gh variable set AWS_DEPLOY_ROLE_ARN …`. 3. Create the
 `prod` GitHub Environment w/ required reviewer. 4. Bedrock (when built): Anthropic one-time usage form.
+5. **SES** (after `ses/shared` applies): publish DNS via the cloudflare PR — 3 DKIM CNAMEs from
+`terraform -chdir=aws/ses/shared output dkim_tokens` (`<token>._domainkey.mojerodos.pl →
+<token>.dkim.amazonses.com`), MAIL FROM MX (`mail.mojerodos.pl → feedback-smtp.eu-central-1.amazonses.com`),
+MAIL FROM SPF TXT — then wait for DKIM status `SUCCESS`. Dev stays in SES **sandbox** (verify test
+recipients). **Production access** is a per-region manual request (console → SES → *Request production
+access*, or `PutAccountDetails`) done at **prod onboarding** — it exits sandbox for the whole eu-central-1
+account; do NOT request it just for dev.
 
 ## Open questions / pending decisions
 - ~~Whether to migrate `aws/bootstrap` state local→S3~~ DONE 2026-07-13 (backend block added,
@@ -109,6 +161,16 @@ shared with [[ci]].
   meanwhile). Attempted 2026-07-11 but the harness auto-denied the change (user hadn't named it).
 
 ## Recent changes log
+- 2026-07-24 (PR branch `feat/aws-ses-dev`): **native SES setup, dev-first, prod-ready.** New
+  `aws/ses/shared` (apex `mojerodos.pl` identity + Easy DKIM + MAIL FROM `mail.mojerodos.pl` +
+  account suppression; `Environment=shared`) and `aws/ses/dev` (config set `mojerodos-dev-ses` +
+  CloudWatch event destination). `aws/identity/dev` gains the `mojerodos-dev-app-ses-send` grant
+  and the boundary widens to Bedrock+SES union. WHY the split: an SES identity is unique per
+  account+region, so the apex is verified once (shared) and envs differ by config set + IAM +
+  sandbox/prod access — lets prod onboard without re-touching the shared root (see Decisions).
+  All three leaves `fmt`+`validate` green (v1.15.8 local), locks committed. NOT applied.
+  Follow-ups: (1) cloudflare DNS PR (DKIM CNAMEs + MAIL FROM MX/SPF from the applied outputs) —
+  see [[cloudflare]]; (2) SES production access + Resend retirement + `ses/prod` at prod onboarding.
 - 2026-07-17 (PR branch `feat/aws-identity-dev-mantle-access`): **bedrock-mantle access extension.**
   Live probe (SigV4, app creds) against `bedrock-mantle.eu-central-1.api.aws/v1/models` returned a
   clean IAM denial: `bedrock-mantle:ListModels` on `project/default`, blocked BY THE BOUNDARY —
