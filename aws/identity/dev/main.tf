@@ -73,15 +73,82 @@ resource "aws_iam_policy" "bedrock_invoke_eu" {
   tags = { Name = "mojerodos-dev-app-bedrock-invoke" }
 }
 
+# SES send grant for the dev app principal (native SES sending from mojerodos.pl).
+# The apex identity + config set live in other roots (aws/ses/shared, aws/ses/dev); IAM does
+# not validate resource existence, so the ARNs are constructed by string here — no
+# terraform_remote_state, and this is valid regardless of ses/* apply order (the CI leaf
+# matrix sorts alphabetically and cannot express cross-leaf ordering).
+# Resources are scoped to BOTH the identity AND the dev config set: SendEmail with a
+# ConfigurationSetName authorizes against both ARNs, so pinning to mojerodos-dev-ses isolates
+# the dev principal from a future mojerodos-prod-ses on the same shared identity.
+# aws:RequestedRegion eu-* is the same RODO residency guardrail applied to the Bedrock grant.
+data "aws_iam_policy_document" "ses_send_eu" {
+  statement {
+    sid = "SendFromApexViaDevConfigSet"
+
+    actions = [
+      "ses:SendEmail",
+      "ses:SendRawEmail",
+    ]
+
+    resources = [
+      "arn:aws:ses:eu-central-1:474939505073:identity/mojerodos.pl",
+      "arn:aws:ses:eu-central-1:474939505073:configuration-set/mojerodos-dev-ses",
+    ]
+
+    condition {
+      test     = "StringLike"
+      variable = "ses:FromAddress"
+      values   = ["*@mojerodos.pl"]
+    }
+
+    condition {
+      test     = "StringLike"
+      variable = "aws:RequestedRegion"
+      values   = ["eu-*"]
+    }
+  }
+}
+
+resource "aws_iam_policy" "ses_send_eu" {
+  name   = "mojerodos-dev-app-ses-send"
+  policy = data.aws_iam_policy_document.ses_send_eu.json
+
+  tags = { Name = "mojerodos-dev-app-ses-send" }
+}
+
 # EU-residency permissions boundary — the hard ceiling for every principal in this root
-# (the planned Roles Anywhere role included, not just today's user). Even if a broader
-# policy is attached later, effective permissions stay capped at EU-only Bedrock
-# invocation. Same document as the grant today on purpose — grant ∩ boundary = the grant;
-# they diverge as soon as the app needs a non-Bedrock service, at which point the boundary
-# widens by service but keeps the eu-* region condition.
+# (the planned Roles Anywhere role included, not just today's user). Even if a broader policy
+# is attached later, effective permissions stay capped at EU-only Bedrock invocation + SES
+# send. The boundary is the UNION of the service grants (Bedrock + SES), keeping the eu-*
+# region condition on every statement — as foretold when only Bedrock was granted: "widens by
+# service but keeps the eu-* region condition." grant ∩ boundary still equals the grant.
+# SES resources are "*" here because the boundary is only a ceiling; the ses_send_eu grant
+# above does the resource/FromAddress scoping.
+data "aws_iam_policy_document" "app_boundary" {
+  source_policy_documents = [data.aws_iam_policy_document.bedrock_invoke_eu.json]
+
+  statement {
+    sid = "BoundarySESSendEU"
+
+    actions = [
+      "ses:SendEmail",
+      "ses:SendRawEmail",
+    ]
+
+    resources = ["*"]
+
+    condition {
+      test     = "StringLike"
+      variable = "aws:RequestedRegion"
+      values   = ["eu-*"]
+    }
+  }
+}
+
 resource "aws_iam_policy" "app_boundary" {
   name   = "mojerodos-dev-app-boundary"
-  policy = data.aws_iam_policy_document.bedrock_invoke_eu.json
+  policy = data.aws_iam_policy_document.app_boundary.json
 
   tags = { Name = "mojerodos-dev-app-boundary" }
 }
@@ -101,4 +168,9 @@ resource "aws_iam_user" "app" {
 resource "aws_iam_user_policy_attachment" "app_bedrock_invoke" {
   user       = aws_iam_user.app.name
   policy_arn = aws_iam_policy.bedrock_invoke_eu.arn
+}
+
+resource "aws_iam_user_policy_attachment" "app_ses_send" {
+  user       = aws_iam_user.app.name
+  policy_arn = aws_iam_policy.ses_send_eu.arn
 }
