@@ -245,3 +245,60 @@ resource "cloudflare_dns_record" "a_wroher_eu_0e6ec3" {
   ttl     = 1
   proxied = true
 }
+
+# ---- Native AWS SES for mojerodos.pl (migrating off Resend) ----
+# Sending path provisioned in aws/ses/shared (apex identity, Easy DKIM, MAIL FROM). These
+# records verify + align that path. Values are the applied outputs of aws/ses/shared:
+# `terraform -chdir=aws/ses/shared output dkim_tokens|mail_from_domain`.
+# Disjoint from the existing Resend records on purpose (different DKIM selectors; MAIL FROM on
+# mail.* not send.*; feedback-smtp.eu-central-1 not eu-west-1), so native SES coexists with
+# Resend during the migration; Resend's send.* + resend._domainkey records retire in a later
+# cutover. The apex SPF already lists include:amazonses.com — left untouched.
+
+# Easy DKIM — 3 CNAMEs to <token>.dkim.amazonses.com. Must not be proxied.
+resource "cloudflare_dns_record" "cname_ses_dkim1_mojerodos_pl" {
+  zone_id = cloudflare_zone.mojerodos_pl.id
+  name    = "2durwhzjkaij7qvgdaxyuuhd2vpbrsr2._domainkey.mojerodos.pl"
+  type    = "CNAME"
+  content = "2durwhzjkaij7qvgdaxyuuhd2vpbrsr2.dkim.amazonses.com"
+  ttl     = 1
+  proxied = false
+}
+
+resource "cloudflare_dns_record" "cname_ses_dkim2_mojerodos_pl" {
+  zone_id = cloudflare_zone.mojerodos_pl.id
+  name    = "yx6vcay72tbkij4cgnnje5q4e33fo6yj._domainkey.mojerodos.pl"
+  type    = "CNAME"
+  content = "yx6vcay72tbkij4cgnnje5q4e33fo6yj.dkim.amazonses.com"
+  ttl     = 1
+  proxied = false
+}
+
+resource "cloudflare_dns_record" "cname_ses_dkim3_mojerodos_pl" {
+  zone_id = cloudflare_zone.mojerodos_pl.id
+  name    = "qadsbfo3ykyfavvse254if7igxwa3o5c._domainkey.mojerodos.pl"
+  type    = "CNAME"
+  content = "qadsbfo3ykyfavvse254if7igxwa3o5c.dkim.amazonses.com"
+  ttl     = 1
+  proxied = false
+}
+
+# Custom MAIL FROM (mail.mojerodos.pl): MX for bounce/complaint feedback + SPF for envelope.
+resource "cloudflare_dns_record" "mx_mail_mojerodos_pl_ses" {
+  zone_id  = cloudflare_zone.mojerodos_pl.id
+  name     = "mail.mojerodos.pl"
+  type     = "MX"
+  content  = "feedback-smtp.eu-central-1.amazonses.com"
+  ttl      = 1
+  proxied  = false
+  priority = 10
+}
+
+resource "cloudflare_dns_record" "txt_mail_mojerodos_pl_spf" {
+  zone_id = cloudflare_zone.mojerodos_pl.id
+  name    = "mail.mojerodos.pl"
+  type    = "TXT"
+  content = "\"v=spf1 include:amazonses.com ~all\""
+  ttl     = 1
+  proxied = false
+}
