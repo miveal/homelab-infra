@@ -1,7 +1,7 @@
 # Cloudflare
 
-**Status:** live — merged to main (PR #6, `58ce4e6`); state adopted; CI plan+apply green
-**Verified as of:** 2026-07-14 on commit `58ce4e6`
+**Status:** live — merged to main (PR #6, `58ce4e6`); state adopted; CI plan+apply green. `dns/` extended 2026-07-28 with native-SES records (branch `feat/cloudflare-ses-dns`, not applied)
+**Verified as of:** 2026-07-28 on commit `ea2d545` + SES DNS on branch `feat/cloudflare-ses-dns`
 **Owner of scope (in repo):** `cloudflare/dns/`, `cloudflare/tunnel/`
 
 ## What this covers
@@ -62,10 +62,10 @@ so 100% of its public-hostname → service mapping is dashboard click-ops today.
 
 ## Key files
 - `cloudflare/README.md` — operator runbook (the split + the one-off import/adopt procedure).
-- `cloudflare/dns/` — root: `zones.tf` (4 zones + `local.account_id`), `records.tf` (26 static
-  records, `zone_id = cloudflare_zone.<z>.id`), `imports.tf` (30 import blocks — delete after
-  first apply), `versions.tf` (backend `cloudflare/dns/…`, provider `~> 5.22`), `providers.tf`,
-  `variables.tf`.
+- `cloudflare/dns/` — root: `zones.tf` (4 zones + `local.account_id`), `records.tf` (31 static
+  records, `zone_id = cloudflare_zone.<z>.id`; incl. 5 native-SES records for mojerodos.pl),
+  `imports.tf` (deleted post-adoption), `versions.tf` (backend `cloudflare/dns/…`, provider
+  `~> 5.22`), `providers.tf`, `variables.tf`.
 - `cloudflare/tunnel/` — root: `tunnel.tf` (the `homelab` tunnel + its ingress config),
   `records.tf` (9 tunnel CNAMEs, `zone_id = local.zone_ids[...]`), `locals.tf` (account_id +
   zone-id map), `imports.tf` (11 blocks), plus the same versions/providers/variables trio.
@@ -126,6 +126,15 @@ captured to the session scratchpad `cf_dns_records.json` during the session.
   faithfully, not changed.
 
 ## Recent changes log
+- 2026-07-28 (branch `feat/cloudflare-ses-dns`): **native-SES DNS for mojerodos.pl** — added 5
+  `cloudflare_dns_record`s to `dns/records.tf`: 3 Easy-DKIM CNAMEs
+  (`<token>._domainkey.mojerodos.pl → <token>.dkim.amazonses.com`) + MAIL FROM `mail.mojerodos.pl`
+  MX (`feedback-smtp.eu-central-1.amazonses.com`) + SPF TXT. Values are the applied outputs of
+  `aws/ses/shared` (see [[aws]]). Phase A of the **Resend migration**: deliberately disjoint from
+  the Resend records (different DKIM selectors; `mail.*` not `send.*`; `eu-central-1` not
+  `eu-west-1`), so native SES coexists; Resend's `send.*` + `resend._domainkey` retire in a later
+  cutover PR. Apex SPF (already `include:amazonses.com`) + `_dmarc` left untouched. `fmt`+`validate`
+  green. NOT applied. Post-apply: SES identity DKIM status should flip to `SUCCESS`.
 - 2026-07-14 (`58ce4e6`, PR #6 squash-merged): **merged + CI-verified live.** `plan (dns)` and
   `plan (tunnel)` green on the PR; prod-gated apply-on-merge for both roots succeeded (dns no-op;
   tunnel = the one benign computed `version` re-PUT). Cloudflare is now fully TF-managed on main.
