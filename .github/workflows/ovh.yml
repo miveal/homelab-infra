@@ -1,0 +1,105 @@
+name: ovh
+
+# Detect which OVH root modules (leaves) changed, then plan (PR) or apply (main) each.
+# OVH has no bootstrap leaf to exclude (like cloudflare.yml). Provider auth is four repo
+# secrets (OVH_APPLICATION_KEY/SECRET, OVH_CONSUMER_KEY, OVH_CLOUD_PROJECT_SERVICE); the
+# shared S3 state backend still uses AWS OIDC (in _terraform.yml).
+on:
+  pull_request:
+    paths:
+      - "ovh/**"
+      - ".github/workflows/ovh.yml"
+      - ".github/workflows/_terraform.yml"
+  push:
+    branches: [main]
+    paths:
+      - "ovh/**"
+      - ".github/workflows/ovh.yml"
+      - ".github/workflows/_terraform.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ovh-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      leaves: ${{ steps.detect.outputs.leaves }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: detect
+        name: Detect changed leaves
+        run: |
+          set -euo pipefail
+          # A leaf = a root module (dir with an S3 backend) under ovh/.
+          mapfile -t all_leaves < <(grep -rl 'backend "s3"' ovh --include='versions.tf' \
+            | xargs -r -n1 dirname | sed 's|^ovh/||' | sort -u)
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          # Fall back to previous commit if the base sha is missing/unfetchable.
+          if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+          fi
+          changed="$(git diff --name-only "$base" "${{ github.sha }}")"
+
+          selected=()
+          # A change to the workflows themselves re-runs every leaf.
+          if echo "$changed" | grep -qE '^\.github/workflows/(ovh|_terraform)\.yml$'; then
+            selected=("${all_leaves[@]}")
+          else
+            for leaf in "${all_leaves[@]}"; do
+              if echo "$changed" | grep -q "^ovh/${leaf}/"; then selected+=("$leaf"); fi
+            done
+          fi
+
+          json="$(printf '%s\n' "${selected[@]:-}" | grep -v '^$' | jq -R . | jq -sc .)"
+          echo "leaves=$json" >> "$GITHUB_OUTPUT"
+          echo "Selected leaves: $json"
+
+  plan:
+    needs: detect
+    if: github.event_name == 'pull_request' && needs.detect.outputs.leaves != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        leaf: ${{ fromJSON(needs.detect.outputs.leaves) }}
+    uses: ./.github/workflows/_terraform.yml
+    with:
+      working_directory: ovh/${{ matrix.leaf }}
+      apply: false
+    secrets:
+      ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
+      ovh_application_secret: ${{ secrets.OVH_APPLICATION_SECRET }}
+      ovh_consumer_key: ${{ secrets.OVH_CONSUMER_KEY }}
+      ovh_cloud_project_service: ${{ secrets.OVH_CLOUD_PROJECT_SERVICE }}
+
+  apply:
+    needs: detect
+    if: github.event_name == 'push' && needs.detect.outputs.leaves != '[]'
+    strategy:
+      fail-fast: false
+      max-parallel: 1 # serialize applies
+      matrix:
+        leaf: ${{ fromJSON(needs.detect.outputs.leaves) }}
+    uses: ./.github/workflows/_terraform.yml
+    with:
+      working_directory: ovh/${{ matrix.leaf }}
+      apply: true
+      environment: prod # manual-approval gate
+    secrets:
+      ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
+      ovh_application_secret: ${{ secrets.OVH_APPLICATION_SECRET }}
+      ovh_consumer_key: ${{ secrets.OVH_CONSUMER_KEY }}
+      ovh_cloud_project_service: ${{ secrets.OVH_CLOUD_PROJECT_SERVICE }}
