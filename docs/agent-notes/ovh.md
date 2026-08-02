@@ -79,3 +79,10 @@ hosts — that's the [[cloudflare]] scope.
   returns only the page shell. Use the raw GitHub source instead:
   `raw.githubusercontent.com/ovh/terraform-provider-ovh/master/docs/resources/<name>.md`
   (default branch is `master`, not `main`).
+
+## Region naming — two different cases (learned 2026-08-02, PR#19/#20)
+
+- **Control-plane** (`ovh_cloud_project_storage.region_name`, paths `/cloud/project/{sn}/region/{r}/...`): **UPPERCASE** codes (`WAW`, `GRA`) — lowercase gets `400 Invalid region parameter`.
+- **S3 data plane** (endpoint hostname + SigV4 signing region, i.e. the app's `VOICE_STORAGE_REGION`): **lowercase** (`s3.waw.io.cloud.ovh.net`, region `waw`), per OVH's own aws-cli examples.
+
+Also learned: consumer-key rights scoped to `/cloud/project/{sn}/storage*` are NOT enough — bucket creation lives under `/region/{r}/storage` and the user resource reads `/role`. Practical minimal scope = all four verbs on `/cloud/project/{sn}/*` (the project IS the security boundary).
