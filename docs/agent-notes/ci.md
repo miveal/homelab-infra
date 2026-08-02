@@ -1,7 +1,7 @@
 # CI
 
 **Status:** partial
-**Verified as of:** 2026-07-14 on commit `58ce4e6` (cloudflare.yml live + green)
+**Verified as of:** 2026-08-02 on commit `564f912` (ovh.yml added, not yet run live)
 **Owner of scope (in repo):** `.github/workflows/`
 
 ## What this covers
@@ -11,8 +11,11 @@ conventions. Provider-specific resource decisions live in that provider's note (
 ## Current state
 - **`_terraform.yml`** — reusable (`workflow_call`): fmt→init→validate→plan|apply for one leaf
   (root module). Inputs: `working_directory`, `apply` (bool), `environment` (gate). OIDC auth for
-  the S3 backend + an **optional `cloudflare_api_token` secret** → job env `TF_VAR_cloudflare_api_token`
-  (empty for AWS leaves, which don't init the CF provider; set for `cloudflare/` leaves).
+  the S3 backend + optional non-AWS provider secrets → job env: `cloudflare_api_token`
+  (`TF_VAR_cloudflare_api_token`, cloudflare/ leaves only) and, as of 2026-08-02,
+  `ovh_application_key` / `ovh_application_secret` / `ovh_consumer_key` /
+  `ovh_cloud_project_service` (`TF_VAR_ovh_*`, ovh/ leaves only). All empty/unused for AWS
+  leaves, which don't init those providers.
 - **`aws.yml`** — caller. `detect` job diffs changed files → JSON list of changed leaves (any
   `aws/*` dir with an S3 backend, excluding `bootstrap`); `plan` matrix on PRs; `apply` matrix
   on push to `main`, `max-parallel: 1`, gated behind the **`prod` Environment** (manual approval).
@@ -20,18 +23,23 @@ conventions. Provider-specific resource decisions live in that provider's note (
   S3-backed dirs; no `bootstrap` to exclude). Passes `secrets.CLOUDFLARE_API_TOKEN` through.
   **VALIDATED LIVE 2026-07-14 on PR #6:** `plan (dns)` + `plan (tunnel)` green, apply-on-merge
   green. Proves the CF-token-secret path + shared S3 backend (AWS OIDC) end-to-end. See [[cloudflare]].
+- **`ovh.yml`** — caller, same shape as `cloudflare.yml` (changed-leaf matrix over `ovh/*`
+  S3-backed dirs; no `bootstrap` to exclude). Passes the four `secrets.OVH_*` through as
+  `ovh_*` to `_terraform.yml`. Added 2026-08-02 alongside the first OVH leaf
+  (`ovh/object-storage/dev/`); **not yet run live** — needs the four `OVH_*` repo secrets
+  created before its `plan` job can init the provider. See [[ovh]].
 - **VALIDATED LIVE 2026-07-13** on PR #3: `detect` → `plan (billing)` passed green — OIDC role
   assumption + S3 backend init + plan all work end-to-end; `apply` correctly skipped on the PR.
 - **`main` is branch-protected** (GitHub): PR required before merge, `enforce_admins: true` (even
   the owner can't push direct), force-push + deletion blocked, 0 required approvals (solo repo —
   GitHub blocks self-approval; owner merges manually). Agent `git push` allowed in settings.json
   (direct-to-main is stopped server-side, not by a client deny).
-- Cloudflare workflow added (`cloudflare.yml`), not yet live; no OVH workflow yet.
 
 ## Key files
 - `.github/workflows/_terraform.yml` — the shared plan/apply implementation
 - `.github/workflows/aws.yml` — AWS changed-leaf matrix (see [[aws]] for the role + backend)
 - `.github/workflows/cloudflare.yml` — Cloudflare changed-leaf matrix (see [[cloudflare]])
+- `.github/workflows/ovh.yml` — OVH changed-leaf matrix (see [[ovh]])
 
 ## Conventions specific to this scope (mirror per new provider)
 - **One reusable workflow, thin per-provider callers.** A caller detects changed leaves and
@@ -58,6 +66,14 @@ conventions. Provider-specific resource decisions live in that provider's note (
 - Posting the PR plan as a comment (workflow logs it today).
 
 ## Recent changes log
+- 2026-08-02 (branch `feat/ovh-voice-object-storage`): added `ovh.yml` + extended
+  `_terraform.yml` with four optional OVH secrets (`ovh_application_key`,
+  `ovh_application_secret`, `ovh_consumer_key`, `ovh_cloud_project_service`) →
+  `TF_VAR_ovh_*`, same shape as the Cloudflare token. **Not run live yet** — no OVH repo
+  secrets exist; the first `plan` on this leaf will fail provider init until they're
+  added (see [[ovh]] and the PR description). Same side-effect risk as the 2026-07-14 CF
+  entry below applies here too: this PR edits `_terraform.yml`, so merge will re-run
+  every AWS + Cloudflare leaf alongside the new OVH one.
 - 2026-07-14 (`58ce4e6`, PR #6): added `cloudflare.yml` + extended `_terraform.yml` with the
   optional `cloudflare_api_token` secret. Ran green live (plan + apply). **Side effect:** because
   the PR edited the shared `_terraform.yml`, `aws.yml` re-ran ALL aws leaves on merge → the billing

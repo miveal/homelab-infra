@@ -23,6 +23,18 @@ on:
       cloudflare_api_token:
         description: Cloudflare API token, exposed as TF_VAR_cloudflare_api_token. Only the cloudflare/ leaves need it; AWS callers omit it.
         required: false
+      ovh_application_key:
+        description: OVH API application key, exposed as TF_VAR_ovh_application_key. Only the ovh/ leaves need it.
+        required: false
+      ovh_application_secret:
+        description: OVH API application secret, exposed as TF_VAR_ovh_application_secret. Only the ovh/ leaves need it.
+        required: false
+      ovh_consumer_key:
+        description: OVH API consumer key (scoped rights — see the ovh/ leaf README), exposed as TF_VAR_ovh_consumer_key. Only the ovh/ leaves need it.
+        required: false
+      ovh_cloud_project_service:
+        description: OVH Public Cloud project ID (service_name), exposed as TF_VAR_ovh_cloud_project_service. Only the ovh/ leaves need it.
+        required: false
 
 permissions:
   contents: read
@@ -36,10 +48,16 @@ jobs:
   terraform:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
-    # Cloudflare provider auth. Empty for AWS leaves (they don't init the CF provider),
-    # set for cloudflare/ leaves. AWS creds for the S3 backend come via OIDC below.
+    # Non-AWS provider auth (Cloudflare, OVH). Empty for leaves that don't need a given
+    # provider (e.g. AWS leaves get none of these) — the provider block is simply never
+    # initialized for them. AWS creds for the shared S3 backend come via OIDC below,
+    # regardless of which provider(s) a leaf uses.
     env:
       TF_VAR_cloudflare_api_token: ${{ secrets.cloudflare_api_token }}
+      TF_VAR_ovh_application_key: ${{ secrets.ovh_application_key }}
+      TF_VAR_ovh_application_secret: ${{ secrets.ovh_application_secret }}
+      TF_VAR_ovh_consumer_key: ${{ secrets.ovh_consumer_key }}
+      TF_VAR_ovh_cloud_project_service: ${{ secrets.ovh_cloud_project_service }}
     defaults:
       run:
         working-directory: ${{ inputs.working_directory }}
