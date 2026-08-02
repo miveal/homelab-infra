@@ -26,7 +26,7 @@ locals {
 # x-amz-storage-class, which the backend does not do today.
 resource "ovh_cloud_project_storage" "voice" {
   service_name = var.ovh_cloud_project_service
-  region_name  = "waw"
+  region_name  = "WAW" # control-plane region codes are UPPERCASE (provider docs: "GRA"); the S3 ENDPOINT hostname keeps lowercase waw
   name         = local.bucket_name
 
   tags = local.tags
