@@ -1,4 +1,4 @@
-# ovh/object-storage/dev — A62 voice cache bucket
+# ovh/object-storage/dev — mojerodos object-storage buckets (dev)
 
 OVH Object Storage (S3-compatible) for the A62 voice cache: backend-generated TTS audio
 for encyclopedia/editorial content (Wiedza), cached so repeat requests don't
@@ -12,6 +12,21 @@ re-synthesize. First root module under `ovh/` in this repo.
   storage only, not compute/network/volume.
 - An S3 policy attached to that user restricting it to `mojerodos-dev-voice` only
   (list+location at the bucket, get+put on objects — no delete).
+
+## Also creates (photos, 2026-08 — A64 wave)
+
+- `mojerodos-dev-photos` — S3 bucket, region `waw`, for A64 **user-uploaded photos**
+  (`DataClassification: personal` — see photos.tf tags for the RODO note; deletion is
+  app-driven: A64 AC-23 hard delete + Art.17 purge, `photos` DB table = authoritative
+  key list).
+- A second Public Cloud user (`objectstore_operator`) + S3 policy scoped to
+  `mojerodos-dev-photos` only — this one INCLUDES `s3:DeleteObject` (hard delete,
+  Art.17 purge, and B4 moderation object moves are product paths; the voice bucket
+  deliberately has no delete).
+- Replaces the k3s in-cluster MinIO dev bucket (`mojerodos-photos-dev`, homelab#106):
+  in-cluster presigned URLs are unreachable from devices (core#989) and OVH-on-dev
+  gives dev/prod provider parity. Backend switch = env-only (`PHOTO_STORAGE_*`),
+  prepared in the paired homelab PR.
 
 ## Deliberately NOT here: S3 credentials
 
