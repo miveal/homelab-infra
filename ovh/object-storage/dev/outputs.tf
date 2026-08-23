@@ -22,3 +22,23 @@ output "s3_user_username" {
   description = "OVH-generated username for the scoped object-storage user (OpenStack identity, informational only — S3 auth uses the access key/secret pair minted manually, not this)."
   value       = ovh_cloud_project_user.voice.username
 }
+
+output "photos_bucket_name" {
+  description = "OVH Object Storage bucket name for A64 user photos (dev)."
+  value       = ovh_cloud_project_storage.photos.name
+}
+
+output "photos_bucket_virtual_host" {
+  description = "Bucket-specific virtual host for the photos bucket, as reported live by OVH."
+  value       = ovh_cloud_project_storage.photos.virtual_host
+}
+
+output "photos_s3_user_id" {
+  description = "OVH Public Cloud user ID scoped to the photos bucket. Use this to mint S3 credentials manually (see README) — never via Terraform, so the secret access key never enters state."
+  value       = ovh_cloud_project_user.photos.id
+}
+
+output "photos_s3_user_username" {
+  description = "OVH-generated username for the scoped photos object-storage user (OpenStack identity, informational only)."
+  value       = ovh_cloud_project_user.photos.username
+}
