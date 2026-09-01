@@ -82,3 +82,12 @@ resource "cloudflare_dns_record" "cname_vault_wroher_eu_75ddeb" {
   ttl     = 1
   proxied = true
 }
+
+resource "cloudflare_dns_record" "cname_files_wroher_eu_75ddeb" {
+  zone_id = local.zone_ids["wroher.eu"]
+  name    = "files.wroher.eu"
+  type    = "CNAME"
+  content = "cbbd687a-a90d-41d6-bde5-305bc25bb946.cfargotunnel.com"
+  ttl     = 1
+  proxied = true
+}
