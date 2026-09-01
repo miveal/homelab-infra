@@ -48,6 +48,11 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "homelab" {
         origin_request = { origin_server_name = "books.wroher.eu" }
       },
       {
+        hostname       = "files.wroher.eu"
+        service        = "https://traefik.traefik.svc:443"
+        origin_request = { origin_server_name = "files.wroher.eu" }
+      },
+      {
         hostname       = "ha.wroher.eu"
         service        = "https://traefik.traefik.svc:443"
         origin_request = { origin_server_name = "ha.wroher.eu" }

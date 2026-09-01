@@ -1,7 +1,7 @@
 # Cloudflare
 
 **Status:** live — merged to main (PR #6, `58ce4e6`); state adopted; CI plan+apply green. `dns/` extended 2026-07-28 with native-SES records (branch `feat/cloudflare-ses-dns`, not applied)
-**Verified as of:** 2026-07-28 on commit `ea2d545` + SES DNS on branch `feat/cloudflare-ses-dns`
+**Verified as of:** 2026-09-01 on commit `7d25baf`+branch `fix/filedrop-tunnel-ingress` — **tunnel-ingress touch only** (one rule added; the stale "hostnames live in the dashboard" line in the boundary section corrected). Everything else carries forward from 2026-07-28 on `ea2d545`.
 **Owner of scope (in repo):** `cloudflare/dns/`, `cloudflare/tunnel/`
 
 ## What this covers
@@ -23,7 +23,9 @@ two ArgoCD apps reach the Cloudflare control plane at all:
    DNS, and it is ephemeral.
 2. **cloudflared** (`infra-cloudflared`) — runs the tunnel **connector only** (data plane).
    Reads a `TUNNEL_TOKEN` secret, makes outbound connections. Manages NO tunnel config and NO
-   DNS records — the tunnel is remote-managed, so its public hostnames live in the dashboard.
+   DNS records — the tunnel is remote-managed, and since the 2026-07-14 import its public
+   hostnames live in `cloudflare/tunnel/tunnel.tf` here (they were dashboard-only when this
+   section was first written).
 
 Everything else (`app-*`, mojerodos dev/prod app-of-apps, monitoring, storage) is in-cluster
 workloads with HTTPRoutes; **none touch Cloudflare.**
@@ -126,6 +128,16 @@ captured to the session scratchpad `cf_dns_records.json` during the session.
   faithfully, not changed.
 
 ## Recent changes log
+- 2026-09-01 (branch `fix/filedrop-tunnel-ingress`): **added the `files.wroher.eu` ingress rule**
+  to `cloudflare/tunnel/tunnel.tf` (origin `https://traefik.traefik.svc:443`, `origin_server_name`
+  set, placed before the trailing `http_status:404`). PR #33 had added only the CNAME in
+  `records.tf`, so the hostname resolved and then 404'd — the request fell through the ingress
+  list to the catch-all. The records/rules 1:1 rule in Gotchas is exactly this, and it broke in
+  the direction the note didn't spell out: **a record without a rule is the silent half.** A
+  rule without a record fails loudly (NXDOMAIN); a record without a rule looks like a working
+  DNS entry and returns a plausible 404 from `server: cloudflare`. Serves `filedrop` in the
+  homelab repo. `terraform validate` not run locally (expired AWS SSO session blocked the
+  provider download) — `fmt -check` clean, CI plan is the gate.
 - 2026-07-28 (branch `feat/cloudflare-ses-dns`): **native-SES DNS for mojerodos.pl** — added 5
   `cloudflare_dns_record`s to `dns/records.tf`: 3 Easy-DKIM CNAMEs
   (`<token>._domainkey.mojerodos.pl → <token>.dkim.amazonses.com`) + MAIL FROM `mail.mojerodos.pl`
